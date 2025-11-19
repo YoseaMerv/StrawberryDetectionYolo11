@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.yosea.skripsi"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.yosea.skripsi"
-        minSdk = 35 // Catatan: minSdk 35 ini sangat tinggi (Android 15+).
-        targetSdk = 36
+        minSdk = 24
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -27,32 +27,33 @@ android {
             )
         }
     }
+
+    androidResources {
+        noCompress += listOf("tflite", "lite")
+    }
+
     compileOptions {
-        // PERBAIKAN: Diubah ke 1.8 untuk standar kompatibilitas Android
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
-        // PERBAIKAN: Diubah ke "1.8" untuk standar kompatibilitas Android
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
+
     buildFeatures {
         compose = true
         mlModelBinding = true
     }
+
     sourceSets {
         getByName("main") {
-            assets {
-                // PERBAIKAN: Mengarahkan ke folder 'ml' agar terbaca sebagai aset
-                // Saya juga memperbaiki path agar menggunakan '/'
-                srcDirs("src/main/assets", "src/main/ml")
-            }
+            assets.srcDirs("src/main/assets", "src/main/ml")
         }
     }
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -62,16 +63,14 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // PERBAIKAN: Anda perlu library TFLite dasar untuk memuat model secara manual
-    // Saya tambahkan versi stabil terbaru
+    // TFLite Core
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
-    // Ini sudah ada di libs.versions.toml Anda dan PENTING untuk proses gambar
-    implementation(libs.tensorflow.lite.support)
-    implementation(libs.tensorflow.lite.metadata)
+    // TFLite Support + Metadata
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-metadata:0.4.4")
 
-    // PERBAIKAN: 'libs.tensorflow.lite.gpu' tidak ada di TOML Anda.
-    // Saya tambahkan library GPU delegate secara manual
+    // GPU Delegate
     implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
 
     testImplementation(libs.junit)
@@ -81,6 +80,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    implementation("androidx.compose.material:material-icons-extended:1.6.0")
-    implementation("androidx.compose.material3:material3")
 }
