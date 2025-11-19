@@ -1,6 +1,5 @@
-package com.yosea.skripsi.ui.theme
+package com.yosea.skripsi.presentation
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

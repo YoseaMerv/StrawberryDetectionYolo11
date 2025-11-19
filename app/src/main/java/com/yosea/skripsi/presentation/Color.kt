@@ -1,4 +1,4 @@
-package com.yosea.skripsi.ui.theme
+package com.yosea.skripsi.presentation
 
 import androidx.compose.ui.graphics.Color
 
