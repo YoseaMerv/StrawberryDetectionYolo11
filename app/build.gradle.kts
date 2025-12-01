@@ -63,12 +63,16 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
 
+
+    // --- Tensorflow ---
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.gpu)
     implementation(libs.tensorflow.lite.support)
     implementation(libs.tensorflow.lite.metadata)
     implementation(libs.tensorflow.lite.task.vision)
+    implementation(libs.tensorflow.lite.gpu.api)
 
     // --- CAMERA X ---
     implementation(libs.camerax.core)
@@ -78,6 +82,7 @@ dependencies {
 
     // --- PERMISSIONS ---
     implementation(libs.accompanist.permissions)
+    implementation(libs.androidx.exifinterface)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

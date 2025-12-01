@@ -36,6 +36,8 @@ fun CameraScreen() {
     val objectDetectorHelper = remember {
         ObjectDetectorHelper(
             context = context,
+            threshold = 0.5f, // Opsional: Atur sensitivitas
+            currentDelegate = ObjectDetectorHelper.DELEGATE_GPU,
             objectDetectorListener = object : ObjectDetectorHelper.DetectorListener {
                 override fun onError(error: String) {
                     Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
@@ -47,7 +49,6 @@ fun CameraScreen() {
                     imageHeight: Int,
                     imageWidth: Int
                 ) {
-                    // Update State UI
                     detectionResults = results ?: emptyList()
                     imgHeight = imageHeight
                     imgWidth = imageWidth
@@ -105,8 +106,6 @@ fun CameraScreen() {
         )
     }
 }
-
-
 
 // Helper function untuk convert ImageProxy ke Bitmap & Rotasi
 fun processImageProxy(helper: ObjectDetectorHelper, imageProxy: ImageProxy) {

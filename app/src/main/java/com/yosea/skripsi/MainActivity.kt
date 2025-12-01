@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.yosea.skripsi.presentation.MainScreen
 import com.yosea.skripsi.presentation.SkripsiTheme
 import com.yosea.skripsi.presentation.camera.CameraScreen
 
@@ -21,9 +22,17 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private fun checkCameraPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        checkCameraPermission()
         // Cek Izin Kamera
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
@@ -33,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SkripsiTheme {
-                CameraScreen()
+                MainScreen()
             }
         }
     }
