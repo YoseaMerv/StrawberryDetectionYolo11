@@ -18,7 +18,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class ObjectDetectorHelper(
-    var threshold: Float = 0.4f,
+    var threshold: Float = 0.5f,
     var numThreads: Int = 2,
     var maxResults: Int = 20,
     var currentDelegate: Int = DELEGATE_CPU,
@@ -29,7 +29,6 @@ class ObjectDetectorHelper(
     private var inputImageWidth: Int = 640
     private var inputImageHeight: Int = 640
 
-    // Label (Pastikan urutan sama dengan data.yaml)
     private val labels = listOf("Healthy", "Leaf Spot", "Powdery Mildew")
 
     init {

@@ -7,14 +7,23 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.yosea.skripsi.presentation.MainScreen
-import com.yosea.skripsi.presentation.SkripsiTheme
-import com.yosea.skripsi.presentation.camera.CameraScreen
+import com.yosea.skripsi.presentation.SkripsiTheme // Sesuaikan dengan nama tema di projectmu
+import com.yosea.skripsi.presentation.WelcomeScreen
+
 
 
 class MainActivity : ComponentActivity() {
 
+    // --- 1. LOGIKA IZIN KAMERA (TETAP ADA) ---
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (!isGranted) {
@@ -32,17 +41,40 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Cek izin saat aplikasi dibuka
         checkCameraPermission()
-        // Cek Izin Kamera
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
 
         setContent {
             SkripsiTheme {
-                MainScreen()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    // --- 2. LOGIKA NAVIGASI (BARU) ---
+                    val rootNavController = rememberNavController()
+
+                    NavHost(
+                        navController = rootNavController,
+                        startDestination = "welcome_screen" // Halaman pertama yang muncul
+                    ) {
+                        // A. Halaman Welcome
+                        composable("welcome_screen") {
+                            WelcomeScreen(
+                                onStartClick = {
+                                    // Pindah ke Main Screen & Hapus Welcome dari Backstack
+                                    rootNavController.navigate("main_screen") {
+                                        popUpTo("welcome_screen") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+
+                        composable("main_screen") {
+                            MainScreen()
+                        }
+                    }
+                }
             }
         }
     }
