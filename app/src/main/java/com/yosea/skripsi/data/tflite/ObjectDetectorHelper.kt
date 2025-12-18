@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
+import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
@@ -11,6 +12,7 @@ import org.tensorflow.lite.support.common.ops.NormalizeOp
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
+import org.tensorflow.lite.support.image.ops.Rot90Op
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.PriorityQueue
@@ -21,13 +23,19 @@ class ObjectDetectorHelper(
     var threshold: Float = 0.5f,
     var numThreads: Int = 2,
     var maxResults: Int = 20,
-    var currentDelegate: Int = DELEGATE_CPU,
+    // UBAH DEFAULT KE GPU AGAR "DIPAKSA"
+    var currentDelegate: Int = DELEGATE_GPU,
     val context: Context,
     val objectDetectorListener: DetectorListener?
 ) {
     private var interpreter: Interpreter? = null
     private var inputImageWidth: Int = 640
     private var inputImageHeight: Int = 640
+
+    private var imageProcessor: ImageProcessor? = null
+    private var tensorImage: TensorImage? = null
+    private var outputBuffer: ByteBuffer? = null
+    private val outputMap = mutableMapOf<Int, Any>()
 
     private val labels = listOf("Healthy", "Leaf Spot", "Powdery Mildew")
 
@@ -38,6 +46,10 @@ class ObjectDetectorHelper(
     fun clearObjectDetector() {
         interpreter?.close()
         interpreter = null
+        imageProcessor = null
+        tensorImage = null
+        outputBuffer = null
+        outputMap.clear()
     }
 
     fun setupObjectDetector() {
@@ -46,12 +58,15 @@ class ObjectDetectorHelper(
 
         when (currentDelegate) {
             DELEGATE_CPU -> { }
-
             DELEGATE_GPU -> {
                 if (CompatibilityList().isDelegateSupportedOnThisDevice) {
                     options.addDelegate(GpuDelegate())
+                    Log.d("ObjectDetector", "Sukses: Menggunakan GPU Delegate")
                 } else {
-                    objectDetectorListener?.onError("GPU tidak support, pakai CPU")
+                    // BERITAHU JIKA GPU GAGAL (STRICT MODE)
+                    objectDetectorListener?.onError("GPU Error: Perangkat tidak support GPU TFLite. Coba ganti ke CPU.")
+                    // Fallback otomatis dimatikan agar kita tahu ini berjalan di GPU atau tidak
+                    // throw RuntimeException("GPU Wajib") // Uncomment jika ingin crash saat tidak ada GPU
                 }
             }
         }
@@ -67,10 +82,29 @@ class ObjectDetectorHelper(
 
             interpreter = Interpreter(modelBuffer, options)
 
-            // Baca Ukuran Input dari Model
             val inputTensor = interpreter?.getInputTensor(0)
             inputImageWidth = inputTensor?.shape()?.get(1) ?: 640
             inputImageHeight = inputTensor?.shape()?.get(2) ?: 640
+
+            // --- INISIALISASI OBJEK SEKALI SAJA ---
+
+            // 1. Siapkan Image Processor Dasar (Resize Stretch & Normalize)
+            imageProcessor = ImageProcessor.Builder()
+                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
+                .add(NormalizeOp(0f, 255f))
+                .build()
+
+            // 2. Siapkan Tensor Image
+            tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
+
+            // 3. Siapkan Output Buffer
+            val outputTensor = interpreter?.getOutputTensor(0)
+            val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
+
+            // Alokasi memori buffer HANYA SEKALI
+            outputBuffer = ByteBuffer.allocateDirect(4 * outputShape[1] * outputShape[2])
+            outputBuffer?.order(ByteOrder.nativeOrder())
+            outputBuffer?.let { outputMap[0] = it }
 
         } catch (e: Exception) {
             objectDetectorListener?.onError("Gagal load model: ${e.message}")
@@ -82,84 +116,77 @@ class ObjectDetectorHelper(
 
         var inferenceTime = SystemClock.uptimeMillis()
 
-        // 1. Resize & Normalize Gambar
-        val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
-            .add(NormalizeOp(0f, 255f)) // Input Float32 (0-1)
-            .build()
+        // --- PROSES DETEKSI CEPAT (OPTIMIZED) ---
 
-        var tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
-        tensorImage.load(image)
-        tensorImage = imageProcessor.process(tensorImage)
+        // 1. Load Gambar ke Container yang sudah ada
+        tensorImage?.load(image)
 
-        // 2. Siapkan Output Buffer
-        val outputTensor = interpreter?.getOutputTensor(0)
-        val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
+        // 2. Rotasi & Resize
+        // Gunakan Rot90Op jika ada rotasi, lalu Resize (Stretch)
+        val dynamicProcessor = if (imageRotation != 0) {
+            ImageProcessor.Builder()
+                .add(Rot90Op(-imageRotation / 90))
+                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
+                .add(NormalizeOp(0f, 255f))
+                .build()
+        } else {
+            imageProcessor // Pakai yang dicache kalau tidak ada rotasi
+        }
 
-        // Output buffer (Flat Array)
-        val outputBuffer = ByteBuffer.allocateDirect(4 * outputShape[1] * outputShape[2])
-        outputBuffer.order(ByteOrder.nativeOrder())
+        val processedImage = dynamicProcessor?.process(tensorImage) ?: return
 
-        val outputs = mutableMapOf<Int, Any>()
-        outputs[0] = outputBuffer
-
-        // 3. Jalankan Deteksi
-        interpreter?.runForMultipleInputsOutputs(arrayOf(tensorImage.buffer), outputs)
+        // 3. Inference (Tanpa alokasi memori baru)
+        outputBuffer?.rewind()
+        interpreter?.runForMultipleInputsOutputs(arrayOf(processedImage.buffer), outputMap)
 
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
 
-        // 4. Parsing Pintar (Auto-Detect Shape)
-        val detections = smartParseYoloOutput(outputBuffer, outputShape, image.width, image.height)
+        // 4. Parsing (Menggunakan Logic "Stretch" yang Presisi)
+        // Kita perlu dimensi efektif setelah rotasi untuk scaling balik yang benar
+        val isRotated = imageRotation == 90 || imageRotation == 270
+        val finalW = if (isRotated) image.height else image.width
+        val finalH = if (isRotated) image.width else image.height
 
-        objectDetectorListener?.onResults(
-            detections,
-            inferenceTime,
-            image.height,
-            image.width
-        )
+        val outputTensor = interpreter?.getOutputTensor(0)
+        val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
+
+        outputBuffer?.let { buffer ->
+            val detections = smartParseYoloOutput(buffer, outputShape, finalW, finalH)
+
+            objectDetectorListener?.onResults(
+                detections,
+                inferenceTime,
+                finalH,
+                finalW
+            )
+        }
     }
 
+    // --- LOGIC PARSING TETAP SAMA (Hanya optimasi loop) ---
     private fun smartParseYoloOutput(byteBuffer: ByteBuffer, shape: IntArray, imgW: Int, imgH: Int): MutableList<Detection> {
         byteBuffer.rewind()
         val floatBuffer = byteBuffer.asFloatBuffer()
         val allDetections = ArrayList<Detection>()
 
-        // Logika Deteksi Bentuk Output (Transpose atau Tidak)
-        // Format A: [1, Channels(7), Anchors(8400)] -> Channels First (Standard YOLOv8/11)
-        // Format B: [1, Anchors(8400), Channels(7)] -> Anchors First
-
-        val dim1 = shape[1] // Bisa 7 atau 8400
-        val dim2 = shape[2] // Bisa 8400 atau 7
-
+        val dim1 = shape[1]
+        val dim2 = shape[2]
         var isChannelFirst = false
-
-        // Kita asumsikan jumlah Anchors (8400) pasti lebih besar dari Channels (7)
         if (dim2 > dim1) {
-            isChannelFirst = true // Format [1, 7, 8400]
+            isChannelFirst = true
         }
 
         val anchors = if (isChannelFirst) dim2 else dim1
         val channels = if (isChannelFirst) dim1 else dim2
 
-        // Loop setiap Anchor (Kotak Prediksi)
+        // Loop Optimized
         for (i in 0 until anchors) {
-            // Fungsi helper untuk ambil data (otomatis handle transpose)
-            fun getVal(row: Int): Float {
-                return if (isChannelFirst) {
-                    // Data loncat per kolom (dim2)
-                    floatBuffer.get(row * dim2 + i)
-                } else {
-                    // Data urut per baris
-                    floatBuffer.get(i * dim2 + row)
-                }
-            }
 
-            // Cari Score Tertinggi di kelas (mulai index 4 sampai channel terakhir)
             var maxScore = 0f
             var maxClassIndex = -1
 
+            // Cari score tertinggi
             for (c in 4 until channels) {
-                val score = getVal(c)
+                val score = if (isChannelFirst) floatBuffer.get(c * dim2 + i) else floatBuffer.get(i * dim2 + c)
                 if (score > maxScore) {
                     maxScore = score
                     maxClassIndex = c - 4
@@ -167,15 +194,12 @@ class ObjectDetectorHelper(
             }
 
             if (maxScore > threshold) {
-                // Ambil Koordinat Mentah
-                var cx = getVal(0)
-                var cy = getVal(1)
-                var w = getVal(2)
-                var h = getVal(3)
+                var cx = if (isChannelFirst) floatBuffer.get(0 * dim2 + i) else floatBuffer.get(i * dim2 + 0)
+                var cy = if (isChannelFirst) floatBuffer.get(1 * dim2 + i) else floatBuffer.get(i * dim2 + 1)
+                var w = if (isChannelFirst) floatBuffer.get(2 * dim2 + i) else floatBuffer.get(i * dim2 + 2)
+                var h = if (isChannelFirst) floatBuffer.get(3 * dim2 + i) else floatBuffer.get(i * dim2 + 3)
 
-                // LOGIC FIX NORMALISASI OTOMATIS
-                // Jika koordinat > 1.0, berarti format Pixel (0-640). Kita bagi dengan 640.
-                // Jika koordinat < 1.0, berarti sudah Normalized (0-1). Jangan dibagi lagi.
+                // LOGIC FIX NORMALISASI
                 if (cx > 1.0f || cy > 1.0f || w > 1.0f) {
                     cx /= inputImageWidth
                     cy /= inputImageHeight
@@ -183,7 +207,7 @@ class ObjectDetectorHelper(
                     h /= inputImageHeight
                 }
 
-                // Convert ke ukuran layar HP (imgW, imgH)
+                // Convert ke ukuran layar HP (Logic Stretch)
                 val x1 = (cx - w / 2) * imgW
                 val y1 = (cy - h / 2) * imgH
                 val x2 = (cx + w / 2) * imgW
@@ -199,8 +223,8 @@ class ObjectDetectorHelper(
         return nms(allDetections)
     }
 
-    // NMS (Non-Maximum Suppression) untuk hapus kotak tumpang tindih
     private fun nms(detections: ArrayList<Detection>, nmsThreshold: Float = 0.45f): MutableList<Detection> {
+        if (detections.isEmpty()) return mutableListOf()
         val pq = PriorityQueue<Detection> { o1, o2 ->
             o2.categories[0].score.compareTo(o1.categories[0].score)
         }
@@ -247,16 +271,5 @@ class ObjectDetectorHelper(
     }
 }
 
-// ==========================================
-// DATA CLASS
-// ==========================================
-data class Detection(
-    val boundingBox: RectF,
-    val categories: List<Category>
-)
-
-data class Category(
-    val label: String,
-    val score: Float,
-    val index: Int = 0
-)
+data class Detection(val boundingBox: RectF, val categories: List<Category>)
+data class Category(val label: String, val score: Float, val index: Int = 0)
