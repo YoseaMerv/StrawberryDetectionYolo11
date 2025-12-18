@@ -25,10 +25,12 @@ class ObjectDetectorHelper(
     var maxResults: Int = 20,
     // UBAH DEFAULT KE GPU AGAR "DIPAKSA"
     var currentDelegate: Int = DELEGATE_GPU,
-    val context: Context,
-    val objectDetectorListener: DetectorListener?
+    val context: Context
 ) {
+    var objectDetectorListener: DetectorListener? = null
+
     private var interpreter: Interpreter? = null
+
     private var inputImageWidth: Int = 640
     private var inputImageHeight: Int = 640
 
