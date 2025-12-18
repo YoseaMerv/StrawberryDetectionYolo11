@@ -15,15 +15,14 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.yosea.skripsi.presentation.LoadingScreen // Pastikan ini di-import
 import com.yosea.skripsi.presentation.MainScreen
-import com.yosea.skripsi.presentation.SkripsiTheme // Sesuaikan dengan nama tema di projectmu
+import com.yosea.skripsi.presentation.SkripsiTheme
 import com.yosea.skripsi.presentation.WelcomeScreen
-
-
 
 class MainActivity : ComponentActivity() {
 
-    // --- 1. LOGIKA IZIN KAMERA (TETAP ADA) ---
+    // --- 1. LOGIKA IZIN KAMERA ---
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (!isGranted) {
@@ -42,7 +41,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Cek izin saat aplikasi dibuka
         checkCameraPermission()
 
         setContent {
@@ -51,18 +49,28 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // --- 2. LOGIKA NAVIGASI (BARU) ---
                     val rootNavController = rememberNavController()
 
                     NavHost(
                         navController = rootNavController,
-                        startDestination = "welcome_screen" // Halaman pertama yang muncul
+                        startDestination = "welcome_screen"
                     ) {
-                        // A. Halaman Welcome
+                        // A. HALAMAN WELCOME
                         composable("welcome_screen") {
                             WelcomeScreen(
                                 onStartClick = {
-                                    // Pindah ke Main Screen & Hapus Welcome dari Backstack
+                                    // Pindah ke Loading Screen
+                                    rootNavController.navigate("loading_screen")
+                                }
+                            )
+                        }
+
+                        // B. HALAMAN LOADING (BARU)
+                        composable("loading_screen") {
+                            LoadingScreen(
+                                onLoadingFinished = {
+                                    // Setelah loading selesai, pindah ke Main Screen
+                                    // dan hapus riwayat backstack agar tidak bisa kembali ke welcome
                                     rootNavController.navigate("main_screen") {
                                         popUpTo("welcome_screen") { inclusive = true }
                                     }
@@ -70,6 +78,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        // C. HALAMAN UTAMA (MainScreen berisi Navbar & GalleryScreen)
                         composable("main_screen") {
                             MainScreen()
                         }
