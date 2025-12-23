@@ -21,9 +21,8 @@ import kotlin.math.min
 
 class ObjectDetectorHelper(
     var threshold: Float = 0.5f,
-    var numThreads: Int = 2,
+    var numThreads: Int = 4,
     var maxResults: Int = 20,
-    // UBAH DEFAULT KE GPU AGAR "DIPAKSA"
     var currentDelegate: Int = DELEGATE_GPU,
     val context: Context
 ) {
@@ -36,7 +35,11 @@ class ObjectDetectorHelper(
 
     private var imageProcessor: ImageProcessor? = null
     private var tensorImage: TensorImage? = null
+
+    // Optimasi Memori: Alokasi sekali saja agar GC tidak bekerja keras
     private var outputBuffer: ByteBuffer? = null
+    private var outputArray: FloatArray? = null
+
     private val outputMap = mutableMapOf<Int, Any>()
 
     private val labels = listOf("Healthy", "Leaf Spot", "Powdery Mildew")
@@ -51,6 +54,7 @@ class ObjectDetectorHelper(
         imageProcessor = null
         tensorImage = null
         outputBuffer = null
+        outputArray = null
         outputMap.clear()
     }
 
@@ -65,15 +69,13 @@ class ObjectDetectorHelper(
                     options.addDelegate(GpuDelegate())
                     Log.d("ObjectDetector", "Sukses: Menggunakan GPU Delegate")
                 } else {
-                    // BERITAHU JIKA GPU GAGAL (STRICT MODE)
-                    objectDetectorListener?.onError("GPU Error: Perangkat tidak support GPU TFLite. Coba ganti ke CPU.")
-                    // Fallback otomatis dimatikan agar kita tahu ini berjalan di GPU atau tidak
-                    // throw RuntimeException("GPU Wajib") // Uncomment jika ingin crash saat tidak ada GPU
+                    objectDetectorListener?.onError("GPU Error: Perangkat tidak support GPU TFLite. Fallback ke CPU.")
                 }
             }
         }
 
         try {
+            // Pastikan nama file sesuai dengan yang ada di assets
             val modelFile = "best_float32.tflite"
             val assetFileDescriptor = context.assets.openFd(modelFile)
             val fileInputStream = java.io.FileInputStream(assetFileDescriptor.fileDescriptor)
@@ -88,25 +90,32 @@ class ObjectDetectorHelper(
             inputImageWidth = inputTensor?.shape()?.get(1) ?: 640
             inputImageHeight = inputTensor?.shape()?.get(2) ?: 640
 
-            // --- INISIALISASI OBJEK SEKALI SAJA ---
+            // --- INISIALISASI OBJEK SEKALI SAJA (Optimasi) ---
 
-            // 1. Siapkan Image Processor Dasar (Resize Stretch & Normalize)
+            // 1. Siapkan Image Processor Dasar
+            // Optimasi: Gunakan NEAREST_NEIGHBOR (Lebih cepat render)
             imageProcessor = ImageProcessor.Builder()
-                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
+                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
                 .add(NormalizeOp(0f, 255f))
                 .build()
 
             // 2. Siapkan Tensor Image
             tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
 
-            // 3. Siapkan Output Buffer
+            // 3. Siapkan Output Buffer & Array
             val outputTensor = interpreter?.getOutputTensor(0)
-            val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
+            val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400) // Default YOLOv8/11 output
 
-            // Alokasi memori buffer HANYA SEKALI
-            outputBuffer = ByteBuffer.allocateDirect(4 * outputShape[1] * outputShape[2])
+            // Hitung ukuran total elemen (misal 1 * 7 * 8400)
+            val totalElements = outputShape[1] * outputShape[2]
+
+            // A. Buffer Native (Wajib untuk TFLite)
+            outputBuffer = ByteBuffer.allocateDirect(4 * totalElements)
             outputBuffer?.order(ByteOrder.nativeOrder())
             outputBuffer?.let { outputMap[0] = it }
+
+            // B. Array Kotlin (Optimasi Baca Cepat) - Dibuat sekali saja
+            outputArray = FloatArray(totalElements)
 
         } catch (e: Exception) {
             objectDetectorListener?.onError("Gagal load model: ${e.message}")
@@ -118,33 +127,30 @@ class ObjectDetectorHelper(
 
         var inferenceTime = SystemClock.uptimeMillis()
 
-        // --- PROSES DETEKSI CEPAT (OPTIMIZED) ---
-
-        // 1. Load Gambar ke Container yang sudah ada
+        // 1. Load Gambar
         tensorImage?.load(image)
 
-        // 2. Rotasi & Resize
-        // Gunakan Rot90Op jika ada rotasi, lalu Resize (Stretch)
+        // 2. Rotasi & Resize (Optimasi Dynamic Processor)
+        // Jika ada rotasi, buat processor baru. Jika tidak, pakai yang dicache.
         val dynamicProcessor = if (imageRotation != 0) {
             ImageProcessor.Builder()
                 .add(Rot90Op(-imageRotation / 90))
-                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
+                .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
                 .add(NormalizeOp(0f, 255f))
                 .build()
         } else {
-            imageProcessor // Pakai yang dicache kalau tidak ada rotasi
+            imageProcessor
         }
 
         val processedImage = dynamicProcessor?.process(tensorImage) ?: return
 
-        // 3. Inference (Tanpa alokasi memori baru)
+        // 3. Inference
         outputBuffer?.rewind()
         interpreter?.runForMultipleInputsOutputs(arrayOf(processedImage.buffer), outputMap)
 
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
 
-        // 4. Parsing (Menggunakan Logic "Stretch" yang Presisi)
-        // Kita perlu dimensi efektif setelah rotasi untuk scaling balik yang benar
+        // 4. Parsing Output
         val isRotated = imageRotation == 90 || imageRotation == 270
         val finalW = if (isRotated) image.height else image.width
         val finalH = if (isRotated) image.width else image.height
@@ -152,8 +158,9 @@ class ObjectDetectorHelper(
         val outputTensor = interpreter?.getOutputTensor(0)
         val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
 
-        outputBuffer?.let { buffer ->
-            val detections = smartParseYoloOutput(buffer, outputShape, finalW, finalH)
+        // Pastikan buffer dan array tidak null
+        if (outputBuffer != null && outputArray != null) {
+            val detections = smartParseYoloOutput(outputBuffer!!, outputArray!!, outputShape, finalW, finalH)
 
             objectDetectorListener?.onResults(
                 detections,
@@ -164,21 +171,32 @@ class ObjectDetectorHelper(
         }
     }
 
-    // --- LOGIC PARSING TETAP SAMA (Hanya optimasi loop) ---
-    private fun smartParseYoloOutput(byteBuffer: ByteBuffer, shape: IntArray, imgW: Int, imgH: Int): MutableList<Detection> {
+    /**
+     * Logic Parsing Super Cepat
+     * Menggunakan FloatArray yang sudah dialokasikan sebelumnya.
+     */
+    private fun smartParseYoloOutput(
+        byteBuffer: ByteBuffer,
+        targetArray: FloatArray, // Array penampung yang disiapkan di init
+        shape: IntArray,
+        imgW: Int,
+        imgH: Int
+    ): MutableList<Detection> {
+
+        // 1. Salin data dari Native Memory (ByteBuffer) ke Java Heap (FloatArray) SEKALIGUS.
+        // Ini jauh lebih cepat daripada memanggil .get() ribuan kali di dalam loop.
         byteBuffer.rewind()
-        val floatBuffer = byteBuffer.asFloatBuffer()
+        byteBuffer.asFloatBuffer().get(targetArray)
+
         val allDetections = ArrayList<Detection>()
 
-        val dim1 = shape[1]
-        val dim2 = shape[2]
-        var isChannelFirst = false
-        if (dim2 > dim1) {
-            isChannelFirst = true
-        }
+        val dim1 = shape[1] // Misal: 7 (4 box + 3 class)
+        val dim2 = shape[2] // Misal: 8400 (anchors)
 
+        // Cek struktur output (Channels Last vs Channels First)
+        val isChannelFirst = dim2 > dim1
         val anchors = if (isChannelFirst) dim2 else dim1
-        val channels = if (isChannelFirst) dim1 else dim2
+        val numClasses = labels.size
 
         // Loop Optimized
         for (i in 0 until anchors) {
@@ -186,22 +204,38 @@ class ObjectDetectorHelper(
             var maxScore = 0f
             var maxClassIndex = -1
 
-            // Cari score tertinggi
-            for (c in 4 until channels) {
-                val score = if (isChannelFirst) floatBuffer.get(c * dim2 + i) else floatBuffer.get(i * dim2 + c)
+            // --- Tahap 1: Cari Score Tertinggi Dulu (Hemat CPU) ---
+            for (c in 0 until numClasses) {
+                // Hitung index flat array secara manual
+                // Struktur data biasanya: [x, y, w, h, score1, score2, ...]
+                val rawIndex = if (isChannelFirst) {
+                    (4 + c) * dim2 + i // [channel][anchor]
+                } else {
+                    i * (4 + numClasses) + (4 + c) // [anchor][channel]
+                }
+
+                // Akses array langsung (O(1) access time)
+                val score = targetArray[rawIndex]
+
                 if (score > maxScore) {
                     maxScore = score
-                    maxClassIndex = c - 4
+                    maxClassIndex = c
                 }
             }
 
+            // --- Tahap 2: Ambil Koordinat HANYA JIKA Score > Threshold ---
             if (maxScore > threshold) {
-                var cx = if (isChannelFirst) floatBuffer.get(0 * dim2 + i) else floatBuffer.get(i * dim2 + 0)
-                var cy = if (isChannelFirst) floatBuffer.get(1 * dim2 + i) else floatBuffer.get(i * dim2 + 1)
-                var w = if (isChannelFirst) floatBuffer.get(2 * dim2 + i) else floatBuffer.get(i * dim2 + 2)
-                var h = if (isChannelFirst) floatBuffer.get(3 * dim2 + i) else floatBuffer.get(i * dim2 + 3)
+                val idxCx = if (isChannelFirst) 0 * dim2 + i else i * (4 + numClasses) + 0
+                val idxCy = if (isChannelFirst) 1 * dim2 + i else i * (4 + numClasses) + 1
+                val idxW  = if (isChannelFirst) 2 * dim2 + i else i * (4 + numClasses) + 2
+                val idxH  = if (isChannelFirst) 3 * dim2 + i else i * (4 + numClasses) + 3
 
-                // LOGIC FIX NORMALISASI
+                var cx = targetArray[idxCx]
+                var cy = targetArray[idxCy]
+                var w  = targetArray[idxW]
+                var h  = targetArray[idxH]
+
+                // Normalisasi jika output model > 1.0 (misal koordinat pixel 0-640)
                 if (cx > 1.0f || cy > 1.0f || w > 1.0f) {
                     cx /= inputImageWidth
                     cy /= inputImageHeight
@@ -209,14 +243,14 @@ class ObjectDetectorHelper(
                     h /= inputImageHeight
                 }
 
-                // Convert ke ukuran layar HP (Logic Stretch)
+                // Konversi ke koordinat Layar (Stretch Logic)
                 val x1 = (cx - w / 2) * imgW
                 val y1 = (cy - h / 2) * imgH
                 val x2 = (cx + w / 2) * imgW
                 val y2 = (cy + h / 2) * imgH
 
                 val rect = RectF(x1, y1, x2, y2)
-                val label = if (maxClassIndex in labels.indices) labels[maxClassIndex] else "Unknown"
+                val label = labels.getOrElse(maxClassIndex) { "Unknown" }
 
                 allDetections.add(Detection(rect, listOf(Category(label, maxScore, maxClassIndex))))
             }
@@ -227,6 +261,8 @@ class ObjectDetectorHelper(
 
     private fun nms(detections: ArrayList<Detection>, nmsThreshold: Float = 0.45f): MutableList<Detection> {
         if (detections.isEmpty()) return mutableListOf()
+
+        // PriorityQueue efisien untuk sorting score
         val pq = PriorityQueue<Detection> { o1, o2 ->
             o2.categories[0].score.compareTo(o1.categories[0].score)
         }
@@ -253,6 +289,7 @@ class ObjectDetectorHelper(
         val interTop = max(boxA.top, boxB.top)
         val interRight = min(boxA.right, boxB.right)
         val interBottom = min(boxA.bottom, boxB.bottom)
+
         if (interLeft < interRight && interTop < interBottom) {
             val interArea = (interRight - interLeft) * (interBottom - interTop)
             val boxAArea = boxA.width() * boxA.height()

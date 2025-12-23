@@ -1,5 +1,6 @@
 package com.yosea.skripsi.presentation.disease
 
+import androidx.compose.foundation.Canvas // Import Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,21 +10,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset // Import Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap // Import StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-// Import data terpusat tadi
 import com.yosea.skripsi.presentation.disease.GlobalDiseaseList
 import com.yosea.skripsi.presentation.disease.DiseaseModel
 
@@ -48,7 +48,6 @@ fun DiseaseScreen() {
             )
         }
 
-        // MENGGUNAKAN DATA DARI GLOBAL LIST
         items(GlobalDiseaseList) { disease ->
             DiseaseCard(
                 disease = disease,
@@ -93,9 +92,40 @@ fun DiseaseScreen() {
                         color = selectedDisease!!.color,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { showBottomSheet = false }) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close")
+
+                    // --- TOMBOL CLOSE CUSTOM (TANPA ICON LIBRARY) ---
+                    // Menggunakan Box dan Canvas untuk menggambar "X"
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp) // Ukuran area sentuh
+                            .clip(CircleShape)
+                            .clickable { showBottomSheet = false }
+                            .padding(10.dp), // Padding agar X tidak terlalu besar
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 2.5.dp.toPx()
+                            val color = Color.Gray
+
+                            // Garis 1 (\)
+                            drawLine(
+                                color = color,
+                                start = Offset(0f, 0f),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = strokeWidth,
+                                cap = StrokeCap.Round
+                            )
+                            // Garis 2 (/)
+                            drawLine(
+                                color = color,
+                                start = Offset(size.width, 0f),
+                                end = Offset(0f, size.height),
+                                strokeWidth = strokeWidth,
+                                cap = StrokeCap.Round
+                            )
+                        }
                     }
+                    // ------------------------------------------------
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
