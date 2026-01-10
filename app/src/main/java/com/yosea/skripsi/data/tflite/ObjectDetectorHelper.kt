@@ -20,9 +20,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 class ObjectDetectorHelper(
-    var threshold: Float = 0.5f,
+    var threshold: Float = 0.516f,
     var numThreads: Int = 4,
-    var maxResults: Int = 20,
+    var maxResults: Int = 15,
     var currentDelegate: Int = DELEGATE_GPU,
     val context: Context
 ) {
@@ -36,7 +36,6 @@ class ObjectDetectorHelper(
     private var imageProcessor: ImageProcessor? = null
     private var tensorImage: TensorImage? = null
 
-    // Optimasi Memori: Alokasi sekali saja agar GC tidak bekerja keras
     private var outputBuffer: ByteBuffer? = null
     private var outputArray: FloatArray? = null
 
@@ -75,7 +74,6 @@ class ObjectDetectorHelper(
         }
 
         try {
-            // Pastikan nama file sesuai dengan yang ada di assets
             val modelFile = "best_float32.tflite"
             val assetFileDescriptor = context.assets.openFd(modelFile)
             val fileInputStream = java.io.FileInputStream(assetFileDescriptor.fileDescriptor)
@@ -90,31 +88,27 @@ class ObjectDetectorHelper(
             inputImageWidth = inputTensor?.shape()?.get(1) ?: 640
             inputImageHeight = inputTensor?.shape()?.get(2) ?: 640
 
-            // --- INISIALISASI OBJEK SEKALI SAJA (Optimasi) ---
 
-            // 1. Siapkan Image Processor Dasar
-            // Optimasi: Gunakan NEAREST_NEIGHBOR (Lebih cepat render)
+            // 1.Image Processor Dasar
+            // Optimasi: Menggunakan NEAREST_NEIGHBOR
             imageProcessor = ImageProcessor.Builder()
                 .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
                 .add(NormalizeOp(0f, 255f))
                 .build()
 
-            // 2. Siapkan Tensor Image
+            // 2.Tensor Image
             tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
 
-            // 3. Siapkan Output Buffer & Array
+            // 3.Output Buffer & Array
             val outputTensor = interpreter?.getOutputTensor(0)
             val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400) // Default YOLOv8/11 output
 
-            // Hitung ukuran total elemen (misal 1 * 7 * 8400)
             val totalElements = outputShape[1] * outputShape[2]
 
-            // A. Buffer Native (Wajib untuk TFLite)
+            // A.Buffer Native
             outputBuffer = ByteBuffer.allocateDirect(4 * totalElements)
             outputBuffer?.order(ByteOrder.nativeOrder())
             outputBuffer?.let { outputMap[0] = it }
-
-            // B. Array Kotlin (Optimasi Baca Cepat) - Dibuat sekali saja
             outputArray = FloatArray(totalElements)
 
         } catch (e: Exception) {
@@ -130,8 +124,7 @@ class ObjectDetectorHelper(
         // 1. Load Gambar
         tensorImage?.load(image)
 
-        // 2. Rotasi & Resize (Optimasi Dynamic Processor)
-        // Jika ada rotasi, buat processor baru. Jika tidak, pakai yang dicache.
+        // 2. Rotasi & Resize
         val dynamicProcessor = if (imageRotation != 0) {
             ImageProcessor.Builder()
                 .add(Rot90Op(-imageRotation / 90))
@@ -149,16 +142,12 @@ class ObjectDetectorHelper(
         interpreter?.runForMultipleInputsOutputs(arrayOf(processedImage.buffer), outputMap)
 
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-
-        // 4. Parsing Output
         val isRotated = imageRotation == 90 || imageRotation == 270
         val finalW = if (isRotated) image.height else image.width
         val finalH = if (isRotated) image.width else image.height
 
         val outputTensor = interpreter?.getOutputTensor(0)
         val outputShape = outputTensor?.shape() ?: intArrayOf(1, 7, 8400)
-
-        // Pastikan buffer dan array tidak null
         if (outputBuffer != null && outputArray != null) {
             val detections = smartParseYoloOutput(outputBuffer!!, outputArray!!, outputShape, finalW, finalH)
 

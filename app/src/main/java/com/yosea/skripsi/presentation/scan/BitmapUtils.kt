@@ -18,7 +18,6 @@ object BitmapUtils {
 
             if (originalBitmap == null) return null
 
-            // Cek Rotasi EXIF
             val inputStreamForExif = context.contentResolver.openInputStream(uri)
             val exif = inputStreamForExif?.let { ExifInterface(it) }
             val orientation = exif?.getAttributeInt(

@@ -35,23 +35,20 @@ fun WelcomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // BAGIAN ATAS: Judul & Logo
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 60.dp)
         ) {
-            // Placeholder Logo (Lingkaran)
             Box(
                 modifier = Modifier
                     .size(200.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE8F5E9)), // Hijau Muda background
+                    .background(Color(0xFFE8F5E9)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.logo_strawberry),
                     contentDescription = "Logo",
-                    // Menggunakan modifier.scale bawaan Compose
                     modifier = Modifier.scale(0.8f)
                 )
             }
@@ -76,8 +73,6 @@ fun WelcomeScreen(
                 color = Color.Gray
             )
         }
-
-        // BAGIAN BAWAH: Tombol
         Button(
             onClick = onStartClick,
             modifier = Modifier

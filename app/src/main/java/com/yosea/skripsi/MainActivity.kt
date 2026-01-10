@@ -22,7 +22,7 @@ import com.yosea.skripsi.presentation.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
 
-    // --- 1. LOGIKA IZIN KAMERA ---
+    // 1. LOGIKA IZIN KAMERA
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (!isGranted) {
@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
                         navController = rootNavController,
                         startDestination = "welcome_screen"
                     ) {
-                        // A. HALAMAN WELCOME
+                        // 1. HALAMAN WELCOME
                         composable("welcome_screen") {
                             WelcomeScreen(
                                 onStartClick = {
@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // B. HALAMAN LOADING (BARU)
+                        // 2. HALAMAN LOADING
                         composable("loading_screen") {
                             LoadingScreen(
                                 onLoadingFinished = {
@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // C. HALAMAN UTAMA (MainScreen berisi Navbar & GalleryScreen)
+                        // 3. HALAMAN UTAMA
                         composable("main_screen") {
                             MainScreen()
                         }

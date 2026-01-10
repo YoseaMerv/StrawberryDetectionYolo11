@@ -53,24 +53,20 @@ fun MainScreen() {
         NavHost(
             navController = navController,
             startDestination = Screen.Camera.route,
-            // HANYA gunakan padding ATAS.
-            // Padding BAWAH dihapus agar semua halaman bisa memanjang sampai belakang Navbar.
             modifier = Modifier.padding(top = innerPadding.calculateTopPadding())
         ) {
-            // 1. Camera (Full Screen)
+            // 1. Camera
             composable(Screen.Camera.route) {
                 CameraScreen()
             }
 
-            // 2. Gallery (Full Screen agar background putihnya ada di belakang navbar)
+            // 2. Gallery
             composable(Screen.Gallery.route) {
-                // Hapus Box wrapper yang membatasi padding bottom
                 GalleryScreen()
             }
 
-            // 3. Disease (Full Screen)
+            // 3. Disease
             composable(Screen.Disease.route) {
-                // Hapus Box wrapper yang membatasi padding bottom
                 DiseaseScreen()
             }
         }
@@ -85,7 +81,7 @@ fun CustomBottomBar(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Konfigurasi Shadow
+    //  Shadow
     val shadowColor = GreenShadowColor
     val shadowRadius = 16.dp
     val shadowOffsetY = (-4).dp

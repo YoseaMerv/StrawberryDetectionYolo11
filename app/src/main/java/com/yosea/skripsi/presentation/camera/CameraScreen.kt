@@ -34,7 +34,10 @@ import com.yosea.skripsi.data.tflite.ObjectDetectorHelper
 import com.yosea.skripsi.presentation.ModelSession
 import com.yosea.skripsi.presentation.components.OverlayView
 import java.util.concurrent.Executors
-
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import android.os.SystemClock
 @Composable
 fun CameraScreen() {
     val context = LocalContext.current
@@ -44,12 +47,15 @@ fun CameraScreen() {
     var detectionResults by remember { mutableStateOf<List<Detection>>(emptyList()) }
     var imgHeight by remember { mutableStateOf(0) }
     var imgWidth by remember { mutableStateOf(0) }
+    var inferenceTimeMs by remember { mutableLongStateOf(0L) }
+    var fps by remember { mutableIntStateOf(0) }
+    var lastFrameTimestamp by remember { mutableLongStateOf(0L) }
 
     // State Zoom
     var camera by remember { mutableStateOf<Camera?>(null) }
     var currentZoom by remember { mutableFloatStateOf(1f) }
 
-    // 1. AMBIL HELPER DARI SESSION
+    // 1. Ambil Helper
     val objectDetectorHelper = remember { ModelSession.detectorHelper }
 
     // 2. DEFINISIKAN LISTENER (Gunakan remember agar object reference tetap sama)
@@ -70,18 +76,28 @@ fun CameraScreen() {
                 detectionResults = results ?: emptyList()
                 imgHeight = imageHeight
                 imgWidth = imageWidth
+
+                // 1. Simpan Inference Time (ms)
+                inferenceTimeMs = inferenceTime
+
+                // 2. Hitung FPS Real-time
+                val currentTime = SystemClock.uptimeMillis()
+                if (lastFrameTimestamp != 0L) {
+                    val frameDiff = currentTime - lastFrameTimestamp
+                    if (frameDiff > 0) {
+                        fps = (1000 / frameDiff).toInt()
+                    }
+                }
+                lastFrameTimestamp = currentTime
             }
         }
     }
 
-    // 3. PASANG LISTENER DENGAN SAFE DISPOSE (SOLUSI BUG 2)
     DisposableEffect(objectDetectorHelper) {
         if (objectDetectorHelper != null) {
             objectDetectorHelper.objectDetectorListener = listener
         }
         onDispose {
-            // HANYA set null jika listener yang aktif adalah listener milik screen ini
-            // Ini mencegah CameraScreen menghapus listener milik screen lain saat transisi
             if (objectDetectorHelper?.objectDetectorListener === listener) {
                 objectDetectorHelper?.objectDetectorListener = null
             }
@@ -96,7 +112,7 @@ fun CameraScreen() {
                     val executor = ContextCompat.getMainExecutor(ctx)
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
-                    // --- LOGIC ZOOM ---
+                    //Zoom
                     val scaleGestureDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                         override fun onScale(detector: ScaleGestureDetector): Boolean {
                             val zoomState = camera?.cameraInfo?.zoomState?.value ?: return false
@@ -110,11 +126,6 @@ fun CameraScreen() {
                             return true
                         }
                     })
-
-                    previewView.setOnTouchListener { _, event ->
-                        scaleGestureDetector.onTouchEvent(event)
-                        return@setOnTouchListener true
-                    }
 
                     cameraProviderFuture.addListener({
                         val cameraProvider = cameraProviderFuture.get()
@@ -155,7 +166,27 @@ fun CameraScreen() {
             imageHeight = imgHeight
         )
 
-        // UI Zoom Button
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 40.dp, start = 16.dp)
+                .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp))
+                .padding(8.dp)
+        ) {
+            Text(
+                text = "Inference: ${inferenceTimeMs}ms",
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "FPS: $fps",
+                color = Color.Cyan,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        // UI Zoom
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -174,7 +205,6 @@ fun CameraScreen() {
     }
 }
 
-// ... (ZoomButton dan processImageProxy tetap sama, copy dari kode sebelumnya jika perlu)
 @Composable
 fun ZoomButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Box(

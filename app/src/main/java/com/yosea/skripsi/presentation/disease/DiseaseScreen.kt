@@ -15,17 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset // Import Offset
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap // Import StrokeCap
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.yosea.skripsi.presentation.disease.GlobalDiseaseList
-import com.yosea.skripsi.presentation.disease.DiseaseModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +57,6 @@ fun DiseaseScreen() {
         }
     }
 
-    // --- POPUP DETAIL ---
     if (showBottomSheet && selectedDisease != null) {
         ModalBottomSheet(
             onDismissRequest = { showBottomSheet = false },
@@ -93,14 +90,12 @@ fun DiseaseScreen() {
                         modifier = Modifier.weight(1f)
                     )
 
-                    // --- TOMBOL CLOSE CUSTOM (TANPA ICON LIBRARY) ---
-                    // Menggunakan Box dan Canvas untuk menggambar "X"
                     Box(
                         modifier = Modifier
-                            .size(36.dp) // Ukuran area sentuh
+                            .size(36.dp)
                             .clip(CircleShape)
                             .clickable { showBottomSheet = false }
-                            .padding(10.dp), // Padding agar X tidak terlalu besar
+                            .padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -125,7 +120,6 @@ fun DiseaseScreen() {
                             )
                         }
                     }
-                    // ------------------------------------------------
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))

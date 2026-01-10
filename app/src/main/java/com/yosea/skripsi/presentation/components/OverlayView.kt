@@ -21,7 +21,7 @@ fun OverlayView(
     results: List<Detection>,
     imageWidth: Int,
     imageHeight: Int,
-    isFit: Boolean = false // Default false (Kamera), True (Galeri)
+    isFit: Boolean = false
 ) {
     val classColors = listOf(Color.Green, Color.Red, Color(0xFFFFA500))
     val defaultColor = Color.White
@@ -30,16 +30,11 @@ fun OverlayView(
         val canvasWidth = size.width
         val canvasHeight = size.height
 
-        // LOGIC SCALE
         val scale = if (isFit) {
-            // Mode Galeri (Fit) -> Gunakan min scale agar gambar muat dalam layar
             min(canvasWidth / imageWidth, canvasHeight / imageHeight)
         } else {
-            // Mode Kamera (Fill) -> Gunakan max scale agar penuh layar
             max(canvasWidth / imageWidth, canvasHeight / imageHeight)
         }
-
-        // LOGIC OFFSET (Center)
         val offsetX = (canvasWidth - imageWidth * scale) / 2
         val offsetY = (canvasHeight - imageHeight * scale) / 2
 

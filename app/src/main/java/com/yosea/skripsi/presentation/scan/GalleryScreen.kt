@@ -26,9 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-// HAPUS IMPORT ICONS LIBRARY
-// import androidx.compose.material.icons.Icons
-// import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,8 +49,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yosea.skripsi.R
@@ -66,28 +61,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
+    var inferenceTimeMs by remember { mutableLongStateOf(0L) }
     var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var detectionResults by remember { mutableStateOf<List<Detection>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // State Popup Detail
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedResult by remember { mutableStateOf<Detection?>(null) }
     val sheetState = rememberModalBottomSheetState()
 
-    // --- STATE PANEL EXPAND/COLLAPSE ---
     var isPanelExpanded by remember { mutableStateOf(true) }
 
-    // Logic Auto-Expand saat ada hasil baru
     LaunchedEffect(detectionResults) {
         if (detectionResults.isNotEmpty()) {
             isPanelExpanded = true
@@ -116,6 +106,7 @@ fun GalleryScreen() {
                 Handler(Looper.getMainLooper()).post {
                     if (!isLoading) return@post
                     detectionResults = results ?: emptyList()
+                    inferenceTimeMs = inferenceTime // Update ms
                     isLoading = false
                 }
             }
@@ -204,7 +195,6 @@ fun GalleryScreen() {
             }
         }
 
-        // --- 2. PANEL KONTROL ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -217,7 +207,6 @@ fun GalleryScreen() {
                 .animateContentSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // HANDLE BAR
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -257,7 +246,11 @@ fun GalleryScreen() {
                         Text("Sedang Menganalisis...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(vertical = 16.dp))
                     } else if (uniqueResults.isNotEmpty()) {
                         Text("Hasil Deteksi", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.align(Alignment.Start))
-
+                        Text(
+                            "Kecepatan Inferensi: ${inferenceTimeMs}ms",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -266,17 +259,16 @@ fun GalleryScreen() {
                                 val label = result.categories.firstOrNull()?.label ?: "Unknown"
                                 val score = result.categories.firstOrNull()?.score ?: 0f
 
-                                // Cari data penyakit
+
                                 val diseaseData = GlobalDiseaseList.find { it.id.trim().equals(label.trim(), ignoreCase = true) }
                                 val displayTitle = diseaseData?.title ?: "$label (Data Tidak Ditemukan)"
 
-                                // 3. Ambil Icon dari diseaseData, atau gunakan default jika null
                                 val iconRes = diseaseData?.iconRes ?: R.drawable.icon_healthy
 
                                 ResultCard(
                                     label = displayTitle,
                                     score = score,
-                                    iconRes = iconRes, // 4. Masukkan icon ke sini
+                                    iconRes = iconRes,
                                     onClick = {
                                         selectedResult = result
                                         showBottomSheet = true
@@ -314,7 +306,6 @@ fun GalleryScreen() {
                         }
 
                     } else if (imageBitmap != null) {
-                        // WARNING NO LEAF DETECTED (Icon Warning Custom)
                         IconWarning(color = Color(0xFFFFC107), modifier = Modifier.size(48.dp))
 
                         Text("Tidak ada daun terdeteksi", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
@@ -393,12 +384,11 @@ fun GalleryScreen() {
     }
 }
 
-// --- KOMPONEN HASIL KARTU DENGAN ICON CUSTOM ---
 @Composable
 fun ResultCard(
     label: String,
     score: Float,
-    iconRes: Int, // 1. Tambahkan parameter resource ID gambar
+    iconRes: Int,
     onClick: () -> Unit
 ) {
     Card(
@@ -412,14 +402,13 @@ fun ResultCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 2. Ganti IconCheckCircle dengan Image logo penyakit
             Image(
                 painter = painterResource(id = iconRes),
                 contentDescription = "Logo Penyakit",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(CircleShape) // Opsional: Agar gambar berbentuk bulat
+                    .clip(CircleShape)
             )
 
             Spacer(Modifier.width(16.dp))
@@ -437,7 +426,6 @@ fun ResultCard(
                 )
             }
 
-            // Icon Arrow tetap ada
             IconArrowRight(color = Color.Gray, modifier = Modifier.size(24.dp))
         }
     }
@@ -455,8 +443,6 @@ fun LoadingOverlay() {
         }
     }
 }
-
-// --- HELPER ICONS (CANVAS DRAWING) ---
 
 @Composable
 fun IconRefresh(color: Color, modifier: Modifier = Modifier) {
@@ -478,8 +464,6 @@ fun IconRefresh(color: Color, modifier: Modifier = Modifier) {
             lineTo(size.width * 0.85f, size.height * 0.15f)
             lineTo(size.width * 0.60f, size.height * 0.20f)
         }
-        // Rotate roughly to match arc end
-        // For simplicity in canvas without complex path transforms, just a simple triangle
     }
 }
 
@@ -497,7 +481,6 @@ fun IconWarning(color: Color, modifier: Modifier = Modifier) {
             color = color,
             style = Stroke(width = size.width * 0.08f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
-        // Exclamation Mark
         drawLine(
             color = color,
             start = Offset(size.width / 2, size.height * 0.35f),

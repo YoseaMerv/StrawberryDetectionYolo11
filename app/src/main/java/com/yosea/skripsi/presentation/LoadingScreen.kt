@@ -40,7 +40,7 @@ fun LoadingScreen(
                 if (ModelSession.detectorHelper == null) {
                     ModelSession.detectorHelper = ObjectDetectorHelper(
                         context = context,
-                        threshold = 0.5f,
+                        threshold = 0.516f,
                         currentDelegate = ObjectDetectorHelper.DELEGATE_GPU
                     )
                 }
@@ -101,7 +101,6 @@ fun LoadingScreen(
     }
 }
 
-// --- SESSION OBJECT DISIMPAN DI SINI ---
 object ModelSession {
     var detectorHelper: ObjectDetectorHelper? = null
 }

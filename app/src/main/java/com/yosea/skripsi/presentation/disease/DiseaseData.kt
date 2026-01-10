@@ -14,7 +14,7 @@ data class DiseaseModel(
 
 val GlobalDiseaseList = listOf(
     DiseaseModel(
-        id = "Healthy", // Cek di labels.txt, apakah "Healthy" atau "healthy"?
+        id = "Healthy",
         title = "Healthy (Sehat)",
         description = "Daun stroberi berwarna hijau segar, bentuk utuh, dan tidak memiliki bercak atau serbuk putih.",
         solution = "Pertahankan perawatan rutin:\n1. Penyiraman teratur.\n2. Pemupukan NPK seimbang.\n3. Penyiangan gulma.",
@@ -22,8 +22,6 @@ val GlobalDiseaseList = listOf(
         color = Color(0xFF4CAF50)
     ),
     DiseaseModel(
-        // PERHATIAN: Coba ganti id ini sesuai labels.txt Anda.
-        // Kemungkinan besar "Leaf Spot" (pakai spasi) atau "Leafspot" (sambung).
         id = "Leaf Spot",
         title = "Leaf Spot (Bercak Daun)",
         description = "Penyakit jamur dengan gejala bercak kecil ungu kemerahan yang membesar menjadi coklat.",
@@ -32,7 +30,6 @@ val GlobalDiseaseList = listOf(
         color = Color(0xFFF44336)
     ),
     DiseaseModel(
-        // PERHATIAN: Cek apakah "Powdery Mildew" atau "Powdery_Mildew"
         id = "Powdery Mildew",
         title = "Powdery Mildew (Embun Tepung)",
         description = "Lapisan serbuk putih seperti tepung pada permukaan daun. Daun mengeriting dan kering.",
